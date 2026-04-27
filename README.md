@@ -11,26 +11,26 @@ A diferencia de un diccionario tradicional que solo da equivalencias de palabras
 ## Objetivo
 Queremos crear una base de datos estructurada donde cada entrada sea un concepto que contenga la información de un término, el idioma, la definición del mismo.
 
-## Tecnologías
-* **Lenguaje:** Python
-* **Almacenamiento:** Archivos JSON (Fase 1)
+## Tecnología
+* **Lenguaje:** Python 3
+* **Base de Datos:** SQLite (SQL relacional)
 * **Control de versiones:** Git / GitHub
 
-## Roadmap
-Construiremos este proyecto de forma gradual:
+## Estructura de la Base de Datos
+Para garantizar la integridad y la independencia de los términos, hemos diseñado un modelo de dos tablas vinculadas:
 
-- [ ] **Fase 1 (Actual):** Script básico en Python para guardar términos por consola en un archivo `.json`.
-- [ ] **Fase 2:** Añadir funciones de búsqueda para consultar términos guardados.
-- [ ] **Fase 3:** Implementar edición y borrado de términos (CRUD completo).
-- [ ] **Fase 4:** Exportar los datos a formato CSV/Excel.
-- [ ] **Fase 5:** (Futuro) Crear una interfaz gráfica o web sencilla.
+### 1. Tabla `Conceptos_ES` (Origen)
+Es el núcleo del gestor. Cada entrada representa un concepto único definido en el idioma base.
+- **ID único:** Identificador autoincremental para cada concepto.
+- **Área:** Categoría temática (ej. Medicina, Informática, Legal).
+- **Término ES:** El término en español que actúa como ancla.
+- **Definición ES:** Definición detallada del concepto en español.
 
-## Estructura de datos
-Por ahora, cada concepto almacenará la siguiente información:
-- ID único
-- Término
-- Idioma (ES, EN, etc.)
-- Definición
+### 2. Tabla `Traducciones` (Destino)
+Almacena las equivalencias en otros idiomas vinculadas al concepto original mediante el ID.
+- **Idioma:** Código del idioma destino (ej. EN, FR, DE).
+- **Término Traducido:** La palabra equivalente en el idioma destino.
+- **Vínculo (FK):** Referencia directa al ID del concepto original en español.
 
 ---
-*Proyecto creado para aprender y practicar programación y gestión terminológica.*
+*Proyecto simplificado creado para aprender y practicar programación y gestión terminológica.*
