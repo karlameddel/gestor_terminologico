@@ -1,6 +1,10 @@
-# GESTOR TERMINOLÓGICO
+# 📚 Gestor Terminológico
 
-¡Bienvenido/a a nuestro repositorio! Somos dos estudiantes universitarias y **este es nuestro primer proyecto de programación** juntas. Lo estamos desarrollando paso a paso para crear una herramienta útil que una nuestros dos mundos: la **Ciencia de Datos** y la **Traducción e Interpretación**.
+¡Bienvenido/a a mi repositorio!
+
+Esta herramienta nace gracias a la colaboración con una compañera estudiante de **Traducción e Interpretación**. Ella aporta la visión experta, identifica las necesidades reales del sector y define la lógica conceptual que requiere un traductor profesional. Mi labor consiste en tomar todas esas ideas, diseñar la arquitectura de la base de datos y escribir el código para convertirlas en una aplicación funcional. 
+
+El objetivo final es construir una solución a medida que una el rigor de los datos con la precisión lingüística.
 
 ## Funcionamiento
 A diferencia de un diccionario tradicional que solo da equivalencias de palabras, un gestor terminológico se centra en **conceptos**. Para un traductor, esta herramienta es vital porque permite:
