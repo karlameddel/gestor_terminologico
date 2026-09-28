@@ -2,7 +2,9 @@
 
 ¡Bienvenido/a a mi repositorio!
 
-Esta herramienta nace gracias a la colaboración con una compañera estudiante de **Traducción e Interpretación**. Ella aporta la visión experta, identifica las necesidades reales del sector y define la lógica conceptual que requiere un traductor profesional. Mi labor consiste en tomar todas esas ideas, diseñar la arquitectura de la base de datos y escribir el código para convertirlas en una aplicación funcional. 
+Esta herramienta nace gracias a la colaboración con una compañera estudiante de **Traducción e Interpretación**. Ella aporta la visión experta, identifica las necesidades reales del sector y define la lógica conceptual que requiere un traductor profesional. Mi labor consiste en tomar todas esas ideas, diseñar la arquitectura de la base de datos y escribir el código para convertirlas en una aplicación funcional.
+
+Por ahora estás observando una primera versión ya que sigue on-going.
 
 El objetivo final es construir una solución a medida que una el rigor de los datos con la precisión lingüística.
 
