@@ -1,1 +1,13 @@
+# Base de datos local
 *.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editores / sistema
+.vscode/
+.idea/
+.DS_Store
