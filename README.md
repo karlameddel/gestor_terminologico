@@ -22,8 +22,15 @@ Queremos crear una base de datos estructurada donde cada entrada sea un concepto
 * **Base de Datos:** SQLite (SQL relacional)
 * **Control de versiones:** Git / GitHub
 
+## Funciones disponibles
+- Añadir términos en español con su área y definición.
+- Añadir varias traducciones por término e idioma.
+- Ver el diccionario completo, ordenado alfabéticamente.
+- **Buscar** en términos, definiciones, áreas y traducciones (sin importar mayúsculas ni tildes, y con palabras parciales).
+- **Editar** términos y traducciones, y **borrar** con confirmación previa.
+
 ## Cómo ejecutarlo
-Solo necesitas Python 3 (SQLite ya viene incluido):
+Solo necesitas Python 3 (SQLite ya viene incluido, no hay que instalar nada más):
 
 ```bash
 git clone https://github.com/<tu-usuario>/gestor_terminologico.git
