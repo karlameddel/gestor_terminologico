@@ -23,7 +23,7 @@ Queremos crear una base de datos estructurada donde cada entrada sea un concepto
 * **Control de versiones:** Git / GitHub
 
 ## Funciones disponibles
-- Añadir términos en español con su área y definición.
+- Añadir términos en español con su área y definición, incluidos **términos con varios significados**.
 - Añadir varias traducciones por término e idioma.
 - Ver el diccionario completo, ordenado alfabéticamente.
 - **Buscar** en términos, definiciones, áreas y traducciones (sin importar mayúsculas ni tildes, y con palabras parciales).
@@ -35,26 +35,67 @@ Solo necesitas Python 3 (SQLite ya viene incluido, no hay que instalar nada más
 ```bash
 git clone https://github.com/<tu-usuario>/gestor_terminologico.git
 cd gestor_terminologico
-python gestor.py
+python main.py
 ```
 
-La primera vez se crea automáticamente el archivo `gestor_traductor.db` junto a `gestor.py`. Ese archivo contiene tus datos y no se sube a GitHub.
+La primera vez se crea automáticamente el archivo `gestor_traductor.db` junto a `main.py`. Ese archivo contiene tus datos y no se sube a GitHub.
+
+## Estructura del proyecto
+```text
+main.py                  # punto de entrada
+gestor/
+├── config.py            # ruta de la base de datos e idioma de origen
+├── texto.py             # comparar textos sin distinguir mayúsculas ni tildes
+├── basedatos.py         # conexión, creación de tablas y migración
+├── repositorio.py       # operaciones sobre los datos (solo SQL)
+├── entrada.py           # pedir datos por teclado
+└── menu.py              # menú y pantallas
+```
+El código está separado en capas: `menu.py` se encarga de lo que se ve y se pregunta, y `repositorio.py` de leer y guardar datos. Así se puede cambiar la interfaz (por ejemplo, a una web) o añadir funciones nuevas (importar CSV) sin tocar el resto.
 
 ## Estructura de la Base de Datos
-Para garantizar la integridad y la independencia de los términos, hemos diseñado un modelo de dos tablas vinculadas:
+El modelo gira en torno al **concepto** (un significado concreto), no a la palabra. Dos tablas vinculadas:
 
-### 1. Tabla `Conceptos_ES` (Origen)
-Es el núcleo del gestor. Cada entrada representa un concepto único definido en el idioma base.
-- **ID único:** Identificador autoincremental para cada concepto.
-- **Área:** Categoría temática (ej. Medicina, Informática, Legal).
-- **Término ES:** El término en español que actúa como ancla.
-- **Definición ES:** Definición detallada del concepto en español.
+```text
+  Conceptos                        Terminos
+┌─────────────┐  1          N  ┌─────────────┐
+│ id_concepto │────────────────│ id_concepto │
+│ area        │                │ idioma      │  ES, EN, FR...
+│ definicion  │                │ termino     │
+└─────────────┘                └─────────────┘
+```
 
-### 2. Tabla `Traducciones` (Destino)
-Almacena las equivalencias en otros idiomas vinculadas al concepto original mediante el ID.
-- **Idioma:** Código del idioma destino (ej. EN, FR, DE).
-- **Término Traducido:** La palabra equivalente en el idioma destino.
-- **Vínculo (FK):** Referencia directa al ID del concepto original en español.
+Un concepto = un significado. Su término en español y sus traducciones son filas de `Terminos`.
+
+### 1. Tabla `Conceptos`
+Cada fila es un significado único.
+- **`id_concepto`:** identificador autoincremental.
+- **`area`:** categoría temática (ej. Medicina, Informática, Legal).
+- **`definicion`:** definición del concepto.
+
+### 2. Tabla `Terminos`
+Guarda las palabras de cada concepto, en cualquier idioma.
+- **`id_concepto`:** vínculo (FK) con el concepto. Si se borra el concepto, se borran sus términos.
+- **`idioma`:** código del idioma (`ES`, `EN`, `FR`...).
+- **`termino`:** la palabra en ese idioma.
+
+Cada concepto tiene **un término en español** (el idioma de origen) y tantas traducciones como se quiera.
+
+### Varios significados
+Como el término vive en `Terminos` y no en `Conceptos`, una misma palabra puede tener varios significados:
+
+| Concepto | Área | Definición | ES | EN |
+|---|---|---|---|---|
+| 1 | Mobiliario | Asiento largo para varias personas | banco | bench |
+| 2 | Finanzas | Entidad que gestiona dinero | banco | bank |
+
+Al añadir un término que ya existe, el programa pregunta si es un significado nuevo y pide una definición para poder distinguirlos.
+
+### Preparado para el futuro
+El español es "solo un idioma más" en la tabla `Terminos`. Para permitir otros idiomas de origen bastará con quitar una restricción (el índice `un_termino_origen_por_concepto`), sin rehacer la base de datos.
+
+### Bases de datos antiguas
+Si abres el programa con una base de datos del formato anterior (`Conceptos_ES` + `Traducciones`), se **migra automáticamente** y antes se guarda una copia de seguridad (`gestor_traductor_copia_<fecha>.db`).
 
 ---
 *Proyecto simplificado creado para aprender y practicar programación y gestión terminológica.*

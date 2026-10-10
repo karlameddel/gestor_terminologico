@@ -1,10 +1,14 @@
 import sqlite3
 import unicodedata
 from contextlib import closing
+from datetime import datetime
 from pathlib import Path
 
 # La base de datos se guarda junto a este archivo, se ejecute desde donde se ejecute.
 DB_PATH = Path(__file__).with_name("gestor_traductor.db")
+
+# Idioma de origen. Cada concepto tiene exactamente un término en este idioma.
+IDIOMA_ORIGEN = "ES"
 
 
 # ---------- Comparación de textos ----------
@@ -20,7 +24,7 @@ def _fold(texto):
 
 def _norm(texto):
     """Como _fold, y además sin tildes ni diéresis: 'Informática' -> 'informatica'.
-    Se usa para buscar sin preocuparse de si se escribió la tilde."""
+    Se usa para buscar y ordenar sin preocuparse de las tildes."""
     descompuesto = unicodedata.normalize("NFD", _fold(texto))
     return "".join(c for c in descompuesto if unicodedata.category(c) != "Mn")
 
@@ -29,36 +33,129 @@ def conectar():
     conn = sqlite3.connect(DB_PATH)
     # SQLite no comprueba las claves foráneas si no se le pide explícitamente.
     conn.execute("PRAGMA foreign_keys = ON")
-    # Permite acceder a las columnas por nombre: fila["termino_es"]
+    # Permite acceder a las columnas por nombre: fila["termino"]
     conn.row_factory = sqlite3.Row
     conn.create_function("fold", 1, _fold, deterministic=True)
     conn.create_function("norm", 1, _norm, deterministic=True)
     return conn
 
 
-def inicializar_bd():
-    # `with conn` hace commit si todo va bien y rollback si hay un error.
-    # `closing` cierra la conexión al terminar en cualquier caso.
-    with closing(conectar()) as conn, conn:
-        # TABLA 1: El idioma origen (Español como base)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS Conceptos_ES (
-                id_concepto   INTEGER PRIMARY KEY AUTOINCREMENT,
-                area          TEXT,
-                termino_es    TEXT UNIQUE COLLATE NOCASE,
-                definicion_es TEXT
-            )""")
+def _crear_esquema(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS Conceptos (
+            id_concepto INTEGER PRIMARY KEY AUTOINCREMENT,
+            area        TEXT NOT NULL,
+            definicion  TEXT NOT NULL DEFAULT ''
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS Terminos (
+            id_termino  INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_concepto INTEGER NOT NULL
+                        REFERENCES Conceptos(id_concepto) ON DELETE CASCADE,
+            idioma      TEXT NOT NULL,
+            termino     TEXT NOT NULL,
+            UNIQUE (id_concepto, idioma, termino)
+        )""")
+    # Regla: como mucho UN término en español por concepto.
+    # (Si algún día hay más idiomas de origen, basta con borrar este índice.)
+    conn.execute(f"""
+        CREATE UNIQUE INDEX IF NOT EXISTS un_termino_origen_por_concepto
+        ON Terminos (id_concepto) WHERE idioma = '{IDIOMA_ORIGEN}'""")
 
-        # TABLA 2: Las traducciones conectadas al término en español
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS Traducciones (
-                id_traduccion     INTEGER PRIMARY KEY AUTOINCREMENT,
-                id_concepto       INTEGER NOT NULL,
-                idioma            TEXT NOT NULL,
-                termino_traducido TEXT NOT NULL,
-                FOREIGN KEY (id_concepto) REFERENCES Conceptos_ES(id_concepto),
-                UNIQUE (id_concepto, idioma, termino_traducido)
-            )""")
+
+# ---------- Migración desde el formato antiguo (Conceptos_ES + Traducciones) ----------
+
+def _tabla_existe(conn, nombre):
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (nombre,)
+    ).fetchone() is not None
+
+
+def _hacer_copia_de_seguridad(conn):
+    marca = datetime.now().strftime("%Y%m%d_%H%M%S")
+    destino = DB_PATH.with_name(f"{DB_PATH.stem}_copia_{marca}.db")
+    with closing(sqlite3.connect(destino)) as copia:
+        conn.backup(copia)
+    return destino
+
+
+def migrar_esquema_antiguo(conn):
+    """Pasa los datos de Conceptos_ES + Traducciones al esquema nuevo.
+    Todo ocurre en UNA transacción: o se migra todo, o no se toca nada.
+    Devuelve (conceptos, traducciones, descartadas)."""
+    n_conceptos = conn.execute("SELECT COUNT(*) FROM Conceptos_ES").fetchone()[0]
+    n_antiguas = conn.execute("SELECT COUNT(*) FROM Traducciones").fetchone()[0]
+    # Traducciones válidas: sin repetidos, no marcadas como "ES" y con concepto existente.
+    n_validas = conn.execute(
+        """SELECT COUNT(*) FROM (
+               SELECT DISTINCT id_concepto, UPPER(idioma), termino_traducido
+               FROM Traducciones
+               WHERE UPPER(idioma) <> ?
+                 AND id_concepto IN (SELECT id_concepto FROM Conceptos_ES))""",
+        (IDIOMA_ORIGEN,),
+    ).fetchone()[0]
+
+    conn.isolation_level = None  # nosotros controlamos la transacción a mano
+    conn.execute("BEGIN")
+    try:
+        _crear_esquema(conn)
+        # Se conservan los mismos id_concepto para no romper nada.
+        conn.execute(
+            """INSERT INTO Conceptos (id_concepto, area, definicion)
+               SELECT id_concepto, COALESCE(area, ''), COALESCE(definicion_es, '')
+               FROM Conceptos_ES""")
+        conn.execute(
+            "INSERT INTO Terminos (id_concepto, idioma, termino) "
+            "SELECT id_concepto, ?, termino_es FROM Conceptos_ES",
+            (IDIOMA_ORIGEN,),
+        )
+        conn.execute(
+            """INSERT OR IGNORE INTO Terminos (id_concepto, idioma, termino)
+               SELECT id_concepto, UPPER(idioma), termino_traducido
+               FROM Traducciones
+               WHERE UPPER(idioma) <> ?
+                 AND id_concepto IN (SELECT id_concepto FROM Conceptos_ES)""",
+            (IDIOMA_ORIGEN,),
+        )
+
+        # Comprobación de seguridad ANTES de borrar nada.
+        c_nuevos = conn.execute("SELECT COUNT(*) FROM Conceptos").fetchone()[0]
+        t_es = conn.execute("SELECT COUNT(*) FROM Terminos WHERE idioma = ?",
+                            (IDIOMA_ORIGEN,)).fetchone()[0]
+        t_otros = conn.execute("SELECT COUNT(*) FROM Terminos WHERE idioma <> ?",
+                               (IDIOMA_ORIGEN,)).fetchone()[0]
+        if (c_nuevos, t_es, t_otros) != (n_conceptos, n_conceptos, n_validas):
+            raise RuntimeError("los recuentos no coinciden tras copiar los datos")
+
+        conn.execute("DROP TABLE Traducciones")
+        conn.execute("DROP TABLE Conceptos_ES")
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.isolation_level = ""  # vuelve al modo normal
+
+    return n_conceptos, n_validas, n_antiguas - n_validas
+
+
+def inicializar_bd():
+    with closing(conectar()) as conn:
+        if _tabla_existe(conn, "Conceptos_ES"):
+            print("🔄 Se ha detectado una base de datos con el formato antiguo. Actualizando...")
+            copia = _hacer_copia_de_seguridad(conn)
+            try:
+                n_c, n_t, descartadas = migrar_esquema_antiguo(conn)
+            except Exception as e:
+                print(f"❌ No se pudo actualizar la base de datos: {e}")
+                print(f"   Tus datos originales no se han modificado. Copia de seguridad: {copia.name}")
+                raise SystemExit(1)
+            print(f"✅ Migrados {n_c} término(s) y {n_t} traducción(es). "
+                  f"Copia de seguridad: {copia.name}")
+            if descartadas:
+                print(f"   ({descartadas} traducción(es) repetidas o inválidas no se han copiado.)")
+        with conn:
+            _crear_esquema(conn)
 
 
 # ---------- Utilidades de entrada ----------
@@ -72,13 +169,22 @@ def pedir_texto(mensaje, obligatorio=True):
         print("⚠️  Este campo no puede estar vacío.")
 
 
+def validar_idioma(codigo):
+    """Devuelve un mensaje de error si el código no vale para una traducción, o None si es válido."""
+    if not (codigo.isalpha() and 2 <= len(codigo) <= 3):
+        return "Escribe un código de 2 o 3 letras (ej. EN, FR, DE)."
+    if codigo == IDIOMA_ORIGEN:
+        return "El español es el idioma de origen; aquí se añaden traducciones a OTROS idiomas."
+    return None
+
+
 def pedir_idioma(mensaje="Idioma destino (ej. FR, EN): "):
-    """Pide un código de idioma de 2 o 3 letras (EN, FR, DE, ...)."""
     while True:
         codigo = input(mensaje).strip().upper()
-        if codigo.isalpha() and 2 <= len(codigo) <= 3:
+        error = validar_idioma(codigo)
+        if error is None:
             return codigo
-        print("⚠️  Escribe un código de 2 o 3 letras (ej. EN, FR, DE).")
+        print(f"⚠️  {error}")
 
 
 def pedir_confirmacion(mensaje):
@@ -111,65 +217,107 @@ def pedir_con_valor_actual(etiqueta, actual):
 
 # ---------- Consultas y presentación (reutilizables) ----------
 
-def buscar_concepto_por_termino(conn, texto):
-    """Busca un concepto por su término en español, ignorando mayúsculas."""
+def conceptos_por_termino_es(conn, texto):
+    """Todos los conceptos (significados) cuyo término en español es `texto`."""
     return conn.execute(
-        "SELECT id_concepto, area, termino_es, definicion_es FROM Conceptos_ES "
-        "WHERE fold(termino_es) = fold(?)",
-        (texto,),
-    ).fetchone()
+        """SELECT c.id_concepto, c.area, c.definicion, t.termino AS termino_es
+           FROM Conceptos c
+           JOIN Terminos t ON t.id_concepto = c.id_concepto AND t.idioma = ?
+           WHERE fold(t.termino) = fold(?)
+           ORDER BY fold(c.definicion), c.id_concepto""",
+        (IDIOMA_ORIGEN, texto),
+    ).fetchall()
 
 
-def pedir_concepto_existente(conn, mensaje):
-    """Pide un término en español y devuelve su fila, o None si no existe."""
+def hay_significado_repetido(conn, termino, definicion, excluir_id=None):
+    """¿Existe ya OTRO concepto con el mismo término en español y la misma definición?"""
+    return conn.execute(
+        """SELECT 1 FROM Conceptos c
+           JOIN Terminos t ON t.id_concepto = c.id_concepto AND t.idioma = ?
+           WHERE fold(t.termino) = fold(?) AND fold(c.definicion) = fold(?)
+             AND c.id_concepto IS NOT ?""",
+        (IDIOMA_ORIGEN, termino, definicion, excluir_id),
+    ).fetchone() is not None
+
+
+def descripcion_significado(c):
+    return f"[{c['area']}] {c['definicion'] or 'sin definición'}"
+
+
+def elegir_concepto(conn, mensaje):
+    """Pide un término en español. Si tiene varios significados, deja elegir uno.
+    Devuelve la fila del concepto o None."""
     texto = pedir_texto(mensaje)
-    fila = buscar_concepto_por_termino(conn, texto)
-    if fila is None:
+    candidatos = conceptos_por_termino_es(conn, texto)
+    if not candidatos:
         print("No existe ese término en español. Créalo primero en la opción 1.")
-    return fila
+        return None
+    if len(candidatos) == 1:
+        return candidatos[0]
+
+    print(f"\n'{candidatos[0]['termino_es']}' tiene {len(candidatos)} significados:")
+    for i, c in enumerate(candidatos, start=1):
+        print(f"  {i}. {descripcion_significado(c)}")
+    n = pedir_numero("¿Cuál? (número, Enter para cancelar): ", len(candidatos))
+    if n is None:
+        print("Cancelado.")
+        return None
+    return candidatos[n - 1]
 
 
 def obtener_traducciones(conn, id_concepto):
     return conn.execute(
-        "SELECT id_traduccion, idioma, termino_traducido FROM Traducciones "
-        "WHERE id_concepto = ? ORDER BY idioma, termino_traducido",
-        (id_concepto,),
+        "SELECT id_termino, idioma, termino FROM Terminos "
+        "WHERE id_concepto = ? AND idioma <> ? ORDER BY idioma, termino",
+        (id_concepto, IDIOMA_ORIGEN),
     ).fetchall()
 
 
 def mostrar_concepto(conn, c):
-    definicion = c["definicion_es"] or "sin definición"
+    definicion = c["definicion"] or "sin definición"
     print(f"\n [ES] {c['termino_es']} | CATEGORÍA: {c['area']} | DEFINICIÓN: '{definicion}'")
     for t in obtener_traducciones(conn, c["id_concepto"]):
-        print(f"   ↳ {t['idioma']}: {t['termino_traducido']}")
+        print(f"   ↳ {t['idioma']}: {t['termino']}")
 
 
 # ---------- Opciones del menú ----------
 
 def añadir_concepto_origen():
     print("\n--- 1. Nuevo Término (Origen: Español) ---")
-    area = pedir_texto("Área (ej. Comida): ")
     termino = pedir_texto("Término en Español: ")
-    definicion = pedir_texto("Definición (puedes dejarla vacía): ", obligatorio=False)
 
-    try:
-        with closing(conectar()) as conn, conn:
-            if buscar_concepto_por_termino(conn, termino):
-                print("AVISO: Ese término en español ya existe en la base de datos.")
+    with closing(conectar()) as conn, conn:
+        existentes = conceptos_por_termino_es(conn, termino)
+        if existentes:
+            print(f"\nYa existe '{termino}' con estos significados:")
+            for c in existentes:
+                print(f"  - {descripcion_significado(c)}")
+            if not pedir_confirmacion("¿Quieres añadir un significado NUEVO y distinto?"):
+                print("Cancelado.")
                 return
-            conn.execute(
-                "INSERT INTO Conceptos_ES (area, termino_es, definicion_es) VALUES (?, ?, ?)",
-                (area, termino, definicion),
-            )
-        print(f"✅ Concepto '{termino}' creado correctamente.")
-    except sqlite3.IntegrityError:
-        print("AVISO: Ese término en español ya existe en la base de datos.")
+            print("Para distinguirlo de los demás, la definición es obligatoria.")
+
+        area = pedir_texto("Área (ej. Comida): ")
+        if existentes:
+            definicion = pedir_texto("Definición: ")
+        else:
+            definicion = pedir_texto("Definición (puedes dejarla vacía): ", obligatorio=False)
+
+        if hay_significado_repetido(conn, termino, definicion):
+            print("AVISO: Ya existe ese término con esa misma definición. No se ha guardado.")
+            return
+
+        cur = conn.execute("INSERT INTO Conceptos (area, definicion) VALUES (?, ?)",
+                           (area, definicion))
+        conn.execute("INSERT INTO Terminos (id_concepto, idioma, termino) VALUES (?, ?, ?)",
+                     (cur.lastrowid, IDIOMA_ORIGEN, termino))
+    print(f"✅ Concepto '{termino}' creado correctamente.")
 
 
 def añadir_traduccion():
     print("\n--- 2. Añadir Traducción ---")
     with closing(conectar()) as conn, conn:
-        concepto = pedir_concepto_existente(
+        concepto = elegir_concepto(
             conn, "¿De qué término en ESPAÑOL quieres añadir la traducción?: ")
         if concepto is None:
             return
@@ -179,8 +327,7 @@ def añadir_traduccion():
 
         try:
             conn.execute(
-                "INSERT INTO Traducciones (id_concepto, idioma, termino_traducido) "
-                "VALUES (?, ?, ?)",
+                "INSERT INTO Terminos (id_concepto, idioma, termino) VALUES (?, ?, ?)",
                 (concepto["id_concepto"], idioma, traduccion),
             )
             print(f"✅ Traducción guardada: {concepto['termino_es']} (ES) -> {traduccion} ({idioma})")
@@ -192,8 +339,11 @@ def ver_diccionario_completo():
     print("\n--- DICCIONARIO COMPLETO ---")
     with closing(conectar()) as conn:
         conceptos = conn.execute(
-            "SELECT id_concepto, area, termino_es, definicion_es "
-            "FROM Conceptos_ES ORDER BY norm(termino_es), fold(termino_es)"
+            """SELECT c.id_concepto, c.area, c.definicion, t.termino AS termino_es
+               FROM Conceptos c
+               JOIN Terminos t ON t.id_concepto = c.id_concepto AND t.idioma = ?
+               ORDER BY norm(t.termino), fold(t.termino), fold(c.definicion), c.id_concepto""",
+            (IDIOMA_ORIGEN,),
         ).fetchall()
 
         if not conceptos:
@@ -211,17 +361,16 @@ def buscar():
 
     with closing(conectar()) as conn:
         resultados = conn.execute(
-            """
-            SELECT DISTINCT c.id_concepto, c.area, c.termino_es, c.definicion_es
-            FROM Conceptos_ES c
-            LEFT JOIN Traducciones t ON t.id_concepto = c.id_concepto
-            WHERE instr(norm(c.termino_es), norm(:q)) > 0
-               OR instr(norm(c.definicion_es), norm(:q)) > 0
-               OR instr(norm(c.area), norm(:q)) > 0
-               OR instr(norm(t.termino_traducido), norm(:q)) > 0
-            ORDER BY norm(c.termino_es), fold(c.termino_es)
-            """,
-            {"q": texto},
+            """SELECT c.id_concepto, c.area, c.definicion, es.termino AS termino_es
+               FROM Conceptos c
+               JOIN Terminos es ON es.id_concepto = c.id_concepto AND es.idioma = :origen
+               WHERE instr(norm(c.definicion), norm(:q)) > 0
+                  OR instr(norm(c.area), norm(:q)) > 0
+                  OR EXISTS (SELECT 1 FROM Terminos t
+                             WHERE t.id_concepto = c.id_concepto
+                               AND instr(norm(t.termino), norm(:q)) > 0)
+               ORDER BY norm(es.termino), fold(es.termino), c.id_concepto""",
+            {"q": texto, "origen": IDIOMA_ORIGEN},
         ).fetchall()
 
         if not resultados:
@@ -235,7 +384,7 @@ def buscar():
 def editar_concepto():
     print("\n--- 5. Editar un término ---")
     with closing(conectar()) as conn, conn:
-        concepto = pedir_concepto_existente(conn, "¿Qué término en ESPAÑOL quieres editar?: ")
+        concepto = elegir_concepto(conn, "¿Qué término en ESPAÑOL quieres editar?: ")
         if concepto is None:
             return
 
@@ -243,28 +392,26 @@ def editar_concepto():
               "En la definición, escribe '-' para vaciarla.")
         area = pedir_con_valor_actual("Área", concepto["area"])
         termino = pedir_con_valor_actual("Término", concepto["termino_es"])
-        definicion = pedir_con_valor_actual("Definición", concepto["definicion_es"] or "")
+        definicion = pedir_con_valor_actual("Definición", concepto["definicion"])
         if definicion == "-":
             definicion = ""
 
-        # ¿El nuevo nombre choca con OTRO concepto distinto de este?
-        otro = buscar_concepto_por_termino(conn, termino)
-        if otro and otro["id_concepto"] != concepto["id_concepto"]:
-            print("AVISO: Ya existe otro término con ese nombre. No se ha cambiado nada.")
+        if hay_significado_repetido(conn, termino, definicion, concepto["id_concepto"]):
+            print("AVISO: Ya existe otro concepto con ese término y esa definición. "
+                  "No se ha cambiado nada.")
             return
 
-        conn.execute(
-            "UPDATE Conceptos_ES SET area = ?, termino_es = ?, definicion_es = ? "
-            "WHERE id_concepto = ?",
-            (area, termino, definicion, concepto["id_concepto"]),
-        )
+        conn.execute("UPDATE Conceptos SET area = ?, definicion = ? WHERE id_concepto = ?",
+                     (area, definicion, concepto["id_concepto"]))
+        conn.execute("UPDATE Terminos SET termino = ? WHERE id_concepto = ? AND idioma = ?",
+                     (termino, concepto["id_concepto"], IDIOMA_ORIGEN))
         print("✅ Término actualizado.")
 
 
 def gestionar_traducciones():
     print("\n--- 6. Editar o borrar una traducción ---")
     with closing(conectar()) as conn, conn:
-        concepto = pedir_concepto_existente(conn, "¿De qué término en ESPAÑOL?: ")
+        concepto = elegir_concepto(conn, "¿De qué término en ESPAÑOL?: ")
         if concepto is None:
             return
 
@@ -275,7 +422,7 @@ def gestionar_traducciones():
 
         print(f"\nTraducciones de '{concepto['termino_es']}':")
         for i, t in enumerate(traducciones, start=1):
-            print(f"  {i}. {t['idioma']}: {t['termino_traducido']}")
+            print(f"  {i}. {t['idioma']}: {t['termino']}")
 
         n = pedir_numero("¿Cuál? (número, Enter para cancelar): ", len(traducciones))
         if n is None:
@@ -285,24 +432,21 @@ def gestionar_traducciones():
 
         accion = input("¿Editar (e) o borrar (b)?: ").strip().lower()
         if accion == "b":
-            if pedir_confirmacion(f"¿Borrar '{elegida['termino_traducido']}' ({elegida['idioma']})?"):
-                conn.execute("DELETE FROM Traducciones WHERE id_traduccion = ?",
-                             (elegida["id_traduccion"],))
+            if pedir_confirmacion(f"¿Borrar '{elegida['termino']}' ({elegida['idioma']})?"):
+                conn.execute("DELETE FROM Terminos WHERE id_termino = ?", (elegida["id_termino"],))
                 print("🗑️  Traducción borrada.")
             else:
                 print("Cancelado.")
         elif accion == "e":
             idioma = pedir_con_valor_actual("Idioma", elegida["idioma"]).upper()
-            if not (idioma.isalpha() and 2 <= len(idioma) <= 3):
-                print("⚠️  Código de idioma no válido. No se ha cambiado nada.")
+            error = validar_idioma(idioma)
+            if error:
+                print(f"⚠️  {error} No se ha cambiado nada.")
                 return
-            texto = pedir_con_valor_actual("Término traducido", elegida["termino_traducido"])
+            texto = pedir_con_valor_actual("Término traducido", elegida["termino"])
             try:
-                conn.execute(
-                    "UPDATE Traducciones SET idioma = ?, termino_traducido = ? "
-                    "WHERE id_traduccion = ?",
-                    (idioma, texto, elegida["id_traduccion"]),
-                )
+                conn.execute("UPDATE Terminos SET idioma = ?, termino = ? WHERE id_termino = ?",
+                             (idioma, texto, elegida["id_termino"]))
                 print("✅ Traducción actualizada.")
             except sqlite3.IntegrityError:
                 print("AVISO: Ya existe esa traducción para este término. No se ha cambiado nada.")
@@ -313,22 +457,21 @@ def gestionar_traducciones():
 def borrar_concepto():
     print("\n--- 7. Borrar un término ---")
     with closing(conectar()) as conn, conn:
-        concepto = pedir_concepto_existente(conn, "¿Qué término en ESPAÑOL quieres borrar?: ")
+        concepto = elegir_concepto(conn, "¿Qué término en ESPAÑOL quieres borrar?: ")
         if concepto is None:
             return
 
         mostrar_concepto(conn, concepto)
         n = len(obtener_traducciones(conn, concepto["id_concepto"]))
         aviso = f" y sus {n} traducción(es)" if n else ""
-        if not pedir_confirmacion(f"\n¿Seguro que quieres borrar '{concepto['termino_es']}'{aviso}? "
-                                  "No se puede deshacer"):
+        if not pedir_confirmacion(f"\n¿Seguro que quieres borrar este significado de "
+                                  f"'{concepto['termino_es']}'{aviso}? No se puede deshacer"):
             print("Cancelado.")
             return
 
-        # Primero las traducciones (hijas) y luego el concepto (padre);
-        # al estar en la misma transacción, o se borra todo o no se borra nada.
-        conn.execute("DELETE FROM Traducciones WHERE id_concepto = ?", (concepto["id_concepto"],))
-        conn.execute("DELETE FROM Conceptos_ES WHERE id_concepto = ?", (concepto["id_concepto"],))
+        # ON DELETE CASCADE: al borrar el concepto, la base de datos borra
+        # automáticamente todos sus términos (ES y traducciones).
+        conn.execute("DELETE FROM Conceptos WHERE id_concepto = ?", (concepto["id_concepto"],))
         print("🗑️  Término borrado.")
 
 
