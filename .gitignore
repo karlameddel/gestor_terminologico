@@ -11,3 +11,7 @@ venv/
 .vscode/
 .idea/
 .DS_Store
+
+# Glosarios exportados
+*.csv
+!ejemplos/*.csv
