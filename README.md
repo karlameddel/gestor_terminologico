@@ -34,7 +34,7 @@ Queremos crear una base de datos estructurada donde cada entrada sea un concepto
 Solo necesitas Python 3 (SQLite ya viene incluido, no hay que instalar nada más):
 
 ```bash
-git clone https://github.com/<tu-usuario>/gestor_terminologico.git
+git clone https://github.com/<karlameddel>/gestor_terminologico.git
 cd gestor_terminologico
 python main.py
 ```
