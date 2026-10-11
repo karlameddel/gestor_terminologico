@@ -1,0 +1,1 @@
+"""Gestor terminológico: conceptos en español con sus traducciones."""
