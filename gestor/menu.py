@@ -2,11 +2,13 @@
 Aquí no hay SQL; los datos se consultan y modifican a través de `repositorio`."""
 import sqlite3
 from contextlib import closing
+from datetime import date
+from pathlib import Path
 
-from . import repositorio as repo
+from . import intercambio, repositorio as repo
 from .basedatos import conectar, inicializar_bd
 from .entrada import (pedir_confirmacion, pedir_con_valor_actual,
-                      pedir_numero, pedir_texto)
+                      pedir_numero, pedir_ruta, pedir_texto)
 
 
 # ---------- Utilidades de presentación ----------
@@ -216,6 +218,89 @@ def borrar_concepto():
         print("🗑️  Término borrado.")
 
 
+def _mostrar_lineas(titulo, lineas, maximo=10):
+    """Imprime una lista de (nº de fila, mensaje), recortada si es muy larga."""
+    print(titulo)
+    for n, mensaje in lineas[:maximo]:
+        print(f"     - fila {n}: {mensaje}")
+    if len(lineas) > maximo:
+        print(f"     ... y {len(lineas) - maximo} más")
+
+
+def mostrar_resumen_importacion(res):
+    sep = "tabulador" if res.separador == "\t" else f"'{res.separador}'"
+    print(f"\n📄 {res.filas_leidas} fila(s) leída(s) · separador {sep} · codificación {res.codificacion}")
+    print("   Idiomas detectados: " + ", ".join(["ES"] + res.idiomas))
+    if res.columnas_ignoradas:
+        print("   Columnas ignoradas: " + ", ".join(res.columnas_ignoradas))
+    print(f"\n   ➕ {res.conceptos_nuevos} concepto(s) nuevo(s)")
+    print(f"   🔁 {res.conceptos_ampliados} concepto(s) existente(s) ampliado(s) con traducciones")
+    print(f"   🌐 {res.traducciones_nuevas} traducción(es) añadida(s) en total")
+    print(f"   ✔️  {res.sin_cambios} fila(s) que ya estaban en el diccionario")
+    if res.avisos:
+        _mostrar_lineas("\nℹ️  Conviene revisar:", res.avisos)
+    if res.errores:
+        _mostrar_lineas(f"\n⚠️  {len(res.errores)} fila(s) con problemas que NO se importarán:", res.errores)
+
+
+def importar_desde_csv():
+    print("\n--- 8. Importar desde CSV (Excel / Google Sheets) ---")
+    print("Columnas: Área, Definición, ES y una columna por idioma (EN, FR...).")
+    print("Varias traducciones en una celda se separan con |   (ej. motherboard | mainboard)")
+    ruta = pedir_ruta("Archivo CSV (Enter para cancelar): ")
+    if ruta is None:
+        print("Cancelado.")
+        return
+    if not ruta.is_file():
+        print(f"⚠️  No encuentro el archivo: {ruta}")
+        return
+    area_defecto = pedir_texto("Área para las filas que no tengan (Enter = rechazarlas): ",
+                               obligatorio=False)
+
+    # Nada se guarda hasta que se confirma: al cerrar la conexión sin commit,
+    # SQLite descarta todo lo importado.
+    with closing(conectar()) as conn:
+        try:
+            res = intercambio.importar_csv(conn, ruta, area_defecto)
+        except intercambio.ErrorCSV as e:
+            print(f"❌ {e}")
+            return
+        mostrar_resumen_importacion(res)
+        if not res.hay_cambios:
+            print("\nNo hay nada nuevo que guardar.")
+            return
+        if pedir_confirmacion("\n¿Guardar estos cambios?"):
+            conn.commit()
+            print("✅ Importación guardada.")
+        else:
+            conn.rollback()
+            print("Cancelado: no se ha guardado nada.")
+
+
+def exportar_a_csv():
+    print("\n--- 9. Exportar a CSV (Excel / Google Sheets) ---")
+    sugerido = f"glosario_{date.today():%Y-%m-%d}.csv"
+    ruta = pedir_ruta(f"Nombre del archivo (Enter = {sugerido}): ") or Path(sugerido)
+    if ruta.suffix.lower() != ".csv":
+        ruta = ruta.with_name(ruta.name + ".csv")
+    if ruta.exists() and not pedir_confirmacion(f"'{ruta.name}' ya existe. ¿Sobrescribirlo?"):
+        print("Cancelado.")
+        return
+
+    with closing(conectar()) as conn:
+        try:
+            n, idiomas = intercambio.exportar_csv(conn, ruta)
+        except OSError as e:
+            print(f"❌ No se pudo guardar el archivo ({e.strerror or e}).")
+            print("   ¿Lo tienes abierto en Excel? Ciérralo e inténtalo de nuevo.")
+            return
+    if n == 0:
+        print("No hay términos que exportar todavía.")
+        return
+    print(f"✅ Exportados {n} concepto(s) con los idiomas: {', '.join(['ES'] + idiomas)}")
+    print(f"   Archivo: {ruta.resolve()}")
+
+
 def menu():
     inicializar_bd()
     opciones = {
@@ -226,6 +311,8 @@ def menu():
         "5": editar_concepto,
         "6": gestionar_traducciones,
         "7": borrar_concepto,
+        "8": importar_desde_csv,
+        "9": exportar_a_csv,
     }
     while True:
         print("\n=== GESTOR TERMINOLÓGICO (Modelo Origen-Destino) ===")
@@ -236,13 +323,15 @@ def menu():
         print("5. Editar un término")
         print("6. Editar o borrar una traducción")
         print("7. Borrar un término")
-        print("8. Salir")
+        print("8. Importar desde CSV (Excel / Google Sheets)")
+        print("9. Exportar a CSV (Excel / Google Sheets)")
+        print("0. Salir")
 
         op = input("Selecciona: ").strip()
-        if op == "8":
+        if op == "0":
             break
         accion = opciones.get(op)
         if accion:
             accion()
         else:
-            print("⚠️  Opción no válida. Elige un número del 1 al 8.")
+            print("⚠️  Opción no válida. Elige una opción del menú (0-9).")
