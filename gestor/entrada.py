@@ -1,4 +1,5 @@
 """Funciones genéricas para pedir datos por teclado."""
+from pathlib import Path
 
 
 def pedir_texto(mensaje, obligatorio=True):
@@ -36,3 +37,10 @@ def pedir_con_valor_actual(etiqueta, actual):
     """Para editar: Enter deja el valor como está."""
     nuevo = input(f"{etiqueta} [{actual}]: ").strip()
     return nuevo or actual
+
+
+def pedir_ruta(mensaje):
+    """Pide la ruta de un archivo. Enter vacío devuelve None.
+    Quita las comillas, que aparecen al arrastrar un archivo a la terminal."""
+    valor = input(mensaje).strip().strip('"').strip("'").strip()
+    return Path(valor).expanduser() if valor else None

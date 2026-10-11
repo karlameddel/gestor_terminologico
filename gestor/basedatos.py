@@ -7,7 +7,8 @@ import sqlite3
 from contextlib import closing
 from datetime import datetime
 
-from . import config, texto
+from . import config
+from . import texto
 
 
 def conectar():
