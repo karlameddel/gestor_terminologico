@@ -9,7 +9,9 @@ from .config import IDIOMA_ORIGEN
 
 
 def validar_idioma(codigo):
-    """Devuelve un mensaje de error si el código no vale para una traducción, o None si es válido."""
+    """Devuelve un mensaje de error si el código no vale para una traducción, o None si es válido.
+    No distingue mayúsculas: 'es' y 'ES' son el mismo idioma."""
+    codigo = codigo.strip().upper()
     if not (codigo.isalpha() and 2 <= len(codigo) <= 3):
         return "Escribe un código de 2 o 3 letras (ej. EN, FR, DE)."
     if codigo == IDIOMA_ORIGEN:
@@ -90,13 +92,13 @@ def crear_concepto(conn, area, termino_es, definicion=""):
 
 
 def crear_traduccion(conn, id_concepto, idioma, termino):
-    """Añade una traducción. Lanza ValueError si el idioma no vale y
-    sqlite3.IntegrityError si esa traducción ya existe."""
+    """Añade una traducción (el código de idioma se guarda en mayúsculas).
+    Lanza ValueError si el idioma no vale y sqlite3.IntegrityError si esa traducción ya existe."""
     error = validar_idioma(idioma)
     if error:
         raise ValueError(error)
     conn.execute("INSERT INTO Terminos (id_concepto, idioma, termino) VALUES (?, ?, ?)",
-                 (id_concepto, idioma, termino))
+                 (id_concepto, idioma.strip().upper(), termino))
 
 
 def actualizar_concepto(conn, id_concepto, area, termino_es, definicion):
@@ -112,7 +114,7 @@ def actualizar_traduccion(conn, id_termino, idioma, termino):
     if error:
         raise ValueError(error)
     conn.execute("UPDATE Terminos SET idioma = ?, termino = ? WHERE id_termino = ?",
-                 (idioma, termino, id_termino))
+                 (idioma.strip().upper(), termino, id_termino))
 
 
 def borrar_traduccion(conn, id_termino):

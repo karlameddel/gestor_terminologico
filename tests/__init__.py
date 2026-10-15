@@ -1,0 +1,1 @@
+"""Tests del gestor terminológico. Se ejecutan con:  python -m unittest"""
