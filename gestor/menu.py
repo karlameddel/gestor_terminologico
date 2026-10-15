@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from . import intercambio, repositorio as repo
-from .basedatos import conectar, inicializar_bd
+from .basedatos import MigracionError, conectar, hay_formato_antiguo, inicializar_bd
 from .entrada import (pedir_confirmacion, pedir_con_valor_actual,
                       pedir_numero, pedir_ruta, pedir_texto)
 
@@ -301,8 +301,26 @@ def exportar_a_csv():
     print(f"   Archivo: {ruta.resolve()}")
 
 
+def preparar_base_de_datos():
+    """Crea o actualiza la base de datos y cuenta al usuario lo que haya pasado."""
+    if hay_formato_antiguo():
+        print("🔄 Se ha detectado una base de datos con el formato antiguo. Actualizando...")
+    try:
+        resultado = inicializar_bd()
+    except MigracionError as e:
+        print(f"❌ No se pudo actualizar la base de datos: {e}")
+        print(f"   Tus datos originales no se han modificado. Copia de seguridad: {e.copia.name}")
+        raise SystemExit(1)
+    if resultado:
+        print(f"✅ Migrados {resultado.conceptos} término(s) y {resultado.traducciones} "
+              f"traducción(es). Copia de seguridad: {resultado.copia.name}")
+        if resultado.descartadas:
+            print(f"   ({resultado.descartadas} traducción(es) repetidas o inválidas "
+                  "no se han copiado.)")
+
+
 def menu():
-    inicializar_bd()
+    preparar_base_de_datos()
     opciones = {
         "1": añadir_concepto_origen,
         "2": añadir_traduccion,

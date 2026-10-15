@@ -4,11 +4,11 @@ El esquema (tablas Conceptos y Terminos) está explicado con un dibujo
 en el README, en la sección "Estructura de la Base de Datos".
 """
 import sqlite3
+from collections import namedtuple
 from contextlib import closing
 from datetime import datetime
 
-from . import config
-from . import texto
+from . import config, texto
 
 
 def conectar():
@@ -122,20 +122,38 @@ def migrar_esquema_antiguo(conn):
     return n_conceptos, n_validas, n_antiguas - n_validas
 
 
+ResultadoMigracion = namedtuple("ResultadoMigracion", "conceptos traducciones descartadas copia")
+
+
+class MigracionError(Exception):
+    """La migración falló. Los datos originales no se han modificado;
+    `copia` es la ruta de la copia de seguridad que se hizo antes de empezar."""
+
+    def __init__(self, causa, copia):
+        super().__init__(str(causa))
+        self.copia = copia
+
+
+def hay_formato_antiguo():
+    """¿La base de datos todavía tiene el formato antiguo (Conceptos_ES + Traducciones)?"""
+    with closing(conectar()) as conn:
+        return _tabla_existe(conn, "Conceptos_ES")
+
+
 def inicializar_bd():
+    """Crea las tablas si hace falta y migra una base de datos con el formato antiguo.
+    Devuelve un ResultadoMigracion si ha migrado, o None si no había nada que migrar.
+    Lanza MigracionError si la migración falla. Aquí no se imprime nada:
+    de eso se encarga quien la llama (el menú)."""
+    resultado = None
     with closing(conectar()) as conn:
         if _tabla_existe(conn, "Conceptos_ES"):
-            print("🔄 Se ha detectado una base de datos con el formato antiguo. Actualizando...")
             copia = _hacer_copia_de_seguridad(conn)
             try:
-                n_c, n_t, descartadas = migrar_esquema_antiguo(conn)
+                n_conceptos, n_traducciones, descartadas = migrar_esquema_antiguo(conn)
             except Exception as e:
-                print(f"❌ No se pudo actualizar la base de datos: {e}")
-                print(f"   Tus datos originales no se han modificado. Copia de seguridad: {copia.name}")
-                raise SystemExit(1)
-            print(f"✅ Migrados {n_c} término(s) y {n_t} traducción(es). "
-                  f"Copia de seguridad: {copia.name}")
-            if descartadas:
-                print(f"   ({descartadas} traducción(es) repetidas o inválidas no se han copiado.)")
+                raise MigracionError(e, copia) from e
+            resultado = ResultadoMigracion(n_conceptos, n_traducciones, descartadas, copia)
         with conn:
             crear_esquema(conn)
+    return resultado
