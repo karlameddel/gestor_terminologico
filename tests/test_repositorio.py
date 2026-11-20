@@ -180,3 +180,22 @@ class TestReglasDeLaBaseDeDatos(Base):
         with self.assertRaises(sqlite3.IntegrityError):
             self.conn.execute("INSERT INTO Terminos (id_concepto, idioma, termino) "
                               "VALUES (999, 'EN', 'x')")
+
+
+class TestConsultasPorId(Base):
+    def test_concepto_por_id(self):
+        id_ = self.crear("Hogar", "casa", "Vivienda")
+        c = repo.concepto_por_id(self.conn, id_)
+        self.assertEqual((c["termino_es"], c["area"], c["definicion"]), ("casa", "Hogar", "Vivienda"))
+        self.assertIsNone(repo.concepto_por_id(self.conn, 999))
+
+    def test_concepto_de_traduccion(self):
+        id_ = self.crear("A", "casa", traducciones=[("EN", "house")])
+        id_t = repo.obtener_traducciones(self.conn, id_)[0]["id_termino"]
+        self.assertEqual(repo.concepto_de_traduccion(self.conn, id_t), id_)
+        self.assertIsNone(repo.concepto_de_traduccion(self.conn, 999))
+
+    def test_el_termino_en_espanol_no_cuenta_como_traduccion(self):
+        id_ = self.crear("A", "casa")
+        id_es = self.conn.execute("SELECT id_termino FROM Terminos WHERE id_concepto = ?", (id_,)).fetchone()[0]
+        self.assertIsNone(repo.concepto_de_traduccion(self.conn, id_es))

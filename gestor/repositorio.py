@@ -82,6 +82,26 @@ def obtener_traducciones(conn, id_concepto):
 
 # ---------- Altas, cambios y bajas ----------
 
+def concepto_por_id(conn, id_concepto):
+    """El concepto con ese id (con su término en español), o None si no existe."""
+    return conn.execute(
+        """SELECT c.id_concepto, c.area, c.definicion, t.termino AS termino_es
+           FROM Conceptos c
+           JOIN Terminos t ON t.id_concepto = c.id_concepto AND t.idioma = ?
+           WHERE c.id_concepto = ?""",
+        (IDIOMA_ORIGEN, id_concepto),
+    ).fetchone()
+
+
+def concepto_de_traduccion(conn, id_termino):
+    """El id del concepto al que pertenece esa traducción, o None si no existe."""
+    fila = conn.execute(
+        "SELECT id_concepto FROM Terminos WHERE id_termino = ? AND idioma <> ?",
+        (id_termino, IDIOMA_ORIGEN),
+    ).fetchone()
+    return fila["id_concepto"] if fila else None
+
+
 def crear_concepto(conn, area, termino_es, definicion=""):
     """Crea un concepto con su término en español. Devuelve el id del concepto."""
     cur = conn.execute("INSERT INTO Conceptos (area, definicion) VALUES (?, ?)",

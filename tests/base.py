@@ -9,15 +9,35 @@ from unittest import mock
 
 from gestor import basedatos, config
 from gestor import menu as modulo_menu
+from gestor import web_servidor as modulo_web
 from gestor.menu import menu
 
 
-def _esta_cerrada(conn):
-    try:
-        conn.execute("SELECT 1")
-        return False
-    except sqlite3.ProgrammingError:
-        return True
+class _ConexionVigilada:
+    """Envuelve una conexión real y apunta si alguien la ha cerrado.
+    (SQLite no permite mirar una conexión desde un hilo distinto del que la creó,
+    y el servidor web atiende cada petición en su propio hilo.)"""
+
+    def __init__(self, real):
+        object.__setattr__(self, "_real", real)
+        object.__setattr__(self, "cerrada", False)
+
+    def close(self):
+        self._real.close()
+        object.__setattr__(self, "cerrada", True)
+
+    def __enter__(self):
+        self._real.__enter__()
+        return self
+
+    def __exit__(self, *args):
+        return self._real.__exit__(*args)
+
+    def __getattr__(self, nombre):
+        return getattr(self._real, nombre)
+
+    def __setattr__(self, nombre, valor):
+        setattr(self._real, nombre, valor)
 
 
 @contextlib.contextmanager
@@ -51,19 +71,23 @@ class BaseTemporal(unittest.TestCase):
         original = basedatos.conectar
 
         def conectar_vigilado():
-            conn = original()
+            conn = _ConexionVigilada(original())
             self._conexiones.append(conn)
             return conn
 
-        for modulo in (basedatos, modulo_menu):                # menu.py importó 'conectar' por nombre
+        # menu.py y web_servidor.py importaron 'conectar' por nombre, hay que cambiarlo en cada uno
+        for modulo in (basedatos, modulo_menu, modulo_web):
             parche = mock.patch.object(modulo, "conectar", conectar_vigilado)
             parche.start()
             self.addCleanup(parche.stop)
 
     def _comprobar_conexiones_cerradas(self):
-        abiertas = [c for c in self._conexiones if not _esta_cerrada(c)]
+        abiertas = [c for c in self._conexiones if not c.cerrada]
         for c in abiertas:
-            c.close()                                          # para no bloquear el borrado
+            try:
+                c._real.close()                                # para no bloquear el borrado
+            except sqlite3.Error:
+                pass
         if abiertas:
             raise AssertionError(
                 f"{len(abiertas)} conexión(es) a la base de datos sin cerrar "
