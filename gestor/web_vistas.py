@@ -6,49 +6,97 @@ caracteres como < o & para que nunca se interpreten como HTML."""
 import html
 
 CSS = """
-:root{--fondo:#f6f7f9;--tarjeta:#fff;--texto:#1d2330;--suave:#5b6577;--borde:#d9dde5;
---acento:#2457c5;--sobre-acento:#fff;--ok-fondo:#e3f4e8;--ok:#14602b;--error-fondo:#fbe5e5;--error:#8c1d1d}
-@media (prefers-color-scheme:dark){:root{--fondo:#14171d;--tarjeta:#1d222b;--texto:#e8eaee;--suave:#a0a8b8;
---borde:#323a48;--acento:#6b9cff;--sobre-acento:#0b1020;--ok-fondo:#17331f;--ok:#8fe0a6;--error-fondo:#3a1b1b;--error:#ffb4b4}}
+:root{
+  --papel:#f6f0e4;--hoja:#fbf7ee;--tinta:#2b2620;--suave:#6b6254;--linea:#ddd2bd;--linea-fuerte:#b9ab8f;
+  --acento:#2f5d50;--sobre-acento:#fbf7ee;--rojo:#8a3b2e;
+  --ok-fondo:#e3ead9;--ok:#2f5d50;--error-fondo:#f1dad2;--error:#8a3b2e;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+@media (prefers-color-scheme:dark){:root{
+  --papel:#1d1a16;--hoja:#26221c;--tinta:#ece4d4;--suave:#a99f8c;--linea:#3a342b;--linea-fuerte:#575043;
+  --acento:#8fc1ae;--sobre-acento:#17211d;--rojo:#e0897a;
+  --ok-fondo:#223228;--ok:#a9d6c3;--error-fondo:#3b2420;--error:#f0a698}}
 *{box-sizing:border-box}
-body{margin:0;font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--fondo);color:var(--texto)}
-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem 1.5rem;
-padding:.8rem 1.2rem;background:var(--tarjeta);border-bottom:1px solid var(--borde)}
-.marca{font-weight:700;color:var(--texto);text-decoration:none}
-nav{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem 1.2rem}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--papel);color:var(--tinta);font:17px/1.65 var(--serif)}
+a{color:var(--acento);text-decoration-thickness:1px;text-underline-offset:.2em}
+a:hover{text-decoration-thickness:2px}
+:focus-visible{outline:2px solid var(--acento);outline-offset:2px;border-radius:2px}
+
+header{max-width:820px;margin:0 auto;padding:1.6rem 1.2rem 0}
+.cabecera{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.4rem 2rem;
+  padding-bottom:.9rem;border-bottom:3px double var(--linea-fuerte)}
+.marca{font-size:1.55rem;font-weight:700;letter-spacing:.01em;color:var(--tinta);text-decoration:none}
+nav{display:flex;flex-wrap:wrap;align-items:baseline;gap:.2rem 1.4rem;font:.95rem var(--sans)}
+nav a{color:var(--suave);text-decoration:none;padding:.15rem 0;border-bottom:2px solid transparent}
+nav a:hover{color:var(--tinta)}
+nav a[aria-current=page]{color:var(--tinta);border-bottom-color:var(--acento)}
 nav form{margin:0}
-a,.enlace{color:var(--acento);text-decoration:none;background:none;border:0;padding:0;font:inherit;cursor:pointer}
-a:hover,.enlace:hover{text-decoration:underline}
-main{max-width:1100px;margin:0 auto;padding:1.2rem}
-h1{font-size:1.4rem;margin:.2rem 0 1rem}
-h2{font-size:1.1rem;margin:1.6rem 0 .6rem}
-.tarjeta{background:var(--tarjeta);border:1px solid var(--borde);border-radius:10px;padding:1rem 1.2rem;margin:1rem 0}
-.aviso{padding:.7rem 1rem;border-radius:8px;margin:0 0 1rem}
-.aviso.ok{background:var(--ok-fondo);color:var(--ok)}
-.aviso.error{background:var(--error-fondo);color:var(--error)}
+.enlace{font:inherit;color:var(--suave);background:none;border:0;padding:.15rem 0;cursor:pointer}
+.enlace:hover{color:var(--rojo)}
+
+main{max-width:820px;margin:0 auto;padding:1.6rem 1.2rem 4rem}
+h1{font-size:2rem;line-height:1.2;margin:.2rem 0 1.1rem;font-weight:700}
+h2{font-size:1.25rem;margin:2.2rem 0 .7rem;font-weight:700}
+p{margin:.5rem 0 1rem;max-width:68ch}
 .suave{color:var(--suave)}
-input,button,select{font:inherit}
-input[type=text],input:not([type]),input[type=file]{width:100%;padding:.45rem .6rem;border:1px solid var(--borde);
-border-radius:6px;background:var(--fondo);color:var(--texto)}
-button{padding:.45rem .9rem;border-radius:6px;border:1px solid var(--borde);background:var(--tarjeta);
-color:var(--texto);cursor:pointer}
+.pequeno{font:.9rem var(--sans);color:var(--suave)}
+
+.aviso{padding:.7rem 1rem;margin:0 0 1.4rem;border-left:4px solid;font:.95rem/1.5 var(--sans)}
+.aviso.ok{background:var(--ok-fondo);color:var(--ok);border-color:var(--ok)}
+.aviso.error{background:var(--error-fondo);color:var(--error);border-color:var(--error)}
+
+input,button,select{font:1rem var(--sans)}
+input[type=text],input:not([type]),input[type=file]{width:100%;padding:.55rem .7rem;border:1px solid var(--linea-fuerte);
+  border-radius:3px;background:var(--hoja);color:var(--tinta)}
+input::placeholder{color:var(--suave);opacity:.8}
+input[type=checkbox]{accent-color:var(--acento);width:1.1rem;height:1.1rem}
+button{padding:.5rem 1rem;border-radius:3px;border:1px solid var(--linea-fuerte);background:var(--hoja);
+  color:var(--tinta);cursor:pointer}
+button:hover{border-color:var(--tinta)}
 button.principal{background:var(--acento);border-color:var(--acento);color:var(--sobre-acento);font-weight:600}
-button.peligro{color:var(--error)}
-button:hover{filter:brightness(.96)}
-.rejilla{display:grid;grid-template-columns:1fr 1fr;gap:.8rem 1rem;align-items:end}
-.rejilla label{display:flex;flex-direction:column;gap:.2rem;font-size:.9rem;color:var(--suave)}
+button.principal:hover{filter:brightness(1.1)}
+button.peligro{color:var(--rojo);border-color:var(--rojo);background:transparent}
+button:disabled{opacity:.55;cursor:default}
+
+.tarjeta{background:var(--hoja);border:1px solid var(--linea);border-radius:3px;padding:1.1rem 1.3rem;margin:1.1rem 0}
+.rejilla{display:grid;grid-template-columns:1fr 1fr;gap:.9rem 1.1rem;align-items:end}
+.rejilla label{display:flex;flex-direction:column;gap:.3rem;font:.9rem var(--sans);color:var(--suave)}
 .rejilla .ancha{grid-column:1/-1}
-.casilla{flex-direction:row!important;align-items:center;gap:.5rem!important}
-.casilla input{width:auto}
-.buscador{display:flex;gap:.5rem;margin:0 0 1rem}
-.tabla{overflow-x:auto}
-table{width:100%;border-collapse:collapse;background:var(--tarjeta);border:1px solid var(--borde)}
-th,td{text-align:left;padding:.55rem .7rem;border-bottom:1px solid var(--borde);vertical-align:top}
-th{font-size:.85rem;color:var(--suave);font-weight:600}
-td.acciones{white-space:nowrap}
-.fila-trad{display:grid;grid-template-columns:5rem 1fr auto auto;gap:.5rem;margin:.4rem 0;align-items:center}
-summary{cursor:pointer;font-weight:600}
-@media (max-width:640px){.rejilla{grid-template-columns:1fr}.fila-trad{grid-template-columns:4rem 1fr}}
+.casilla{flex-direction:row!important;align-items:center;gap:.6rem!important}
+.casilla input{width:1.1rem;flex:none}
+details.tarjeta>summary{cursor:pointer;font:600 1rem var(--sans);color:var(--acento)}
+
+.buscador{display:flex;gap:.6rem;margin:0 0 .6rem}
+.buscador input{font-size:1.1rem;padding:.7rem .9rem}
+.recuento{font:.9rem var(--sans);color:var(--suave);margin:.4rem 0 1.4rem}
+
+.entrada{padding:1.15rem 0 1.2rem;border-top:1px solid var(--linea)}
+.entrada:last-of-type{border-bottom:1px solid var(--linea)}
+.entrada .cabeza{display:flex;flex-wrap:wrap;align-items:baseline;gap:.2rem .8rem}
+.entrada h2{font-size:1.45rem;margin:0;line-height:1.25}
+.entrada h2 a{color:var(--tinta);text-decoration:none}
+.entrada h2 a:hover{color:var(--acento);text-decoration:underline}
+.area{font-style:italic;color:var(--suave)}
+.entrada .editar{margin-left:auto;font:.9rem var(--sans)}
+.def{margin:.35rem 0 .5rem}
+.trads{margin:.25rem 0 0;display:grid;grid-template-columns:2.6rem 1fr;gap:.1rem .4rem;max-width:none}
+.idioma{font:700 .85rem var(--sans);color:var(--acento);padding-top:.2rem}
+
+.fila-trad{display:grid;grid-template-columns:5rem 1fr auto auto;gap:.5rem;margin:.5rem 0;align-items:center}
+summary{cursor:pointer}
+.vacio{padding:1.6rem 0;color:var(--suave)}
+.migas{font:.95rem var(--sans);margin:0 0 .6rem}
+
+@media (max-width:640px){
+  body{font-size:16px}
+  h1{font-size:1.6rem}
+  .rejilla{grid-template-columns:1fr}
+  .fila-trad{grid-template-columns:4rem 1fr}
+  .buscador{flex-direction:column}
+  .entrada .editar{margin-left:0}}
+@media (prefers-reduced-motion:no-preference){
+  button,a,input{transition:border-color .15s,color .15s,filter .15s}}
 """
 
 
@@ -56,23 +104,30 @@ def esc(valor):
     return html.escape("" if valor is None else str(valor), quote=True)
 
 
-def pagina(titulo, cuerpo, mensaje="", tipo="ok"):
+def pagina(titulo, cuerpo, mensaje="", tipo="ok", activa=""):
     tipo = "error" if tipo == "error" else "ok"
     aviso = f'<div class="aviso {tipo}" role="status">{esc(mensaje)}</div>' if mensaje else ""
+
+    def enlace(ruta, texto, clave):
+        actual = ' aria-current="page"' if clave == activa else ""
+        return f'<a href="{ruta}"{actual}>{texto}</a>'
+
     return f"""<!doctype html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(titulo)} · Gestor terminológico</title><style>{CSS}</style></head>
 <body>
 <header>
-  <a class="marca" href="/">📚 Gestor terminológico</a>
-  <nav>
-    <a href="/">Diccionario</a>
-    <a href="/importar">Importar CSV</a>
-    <a href="/exportar">Exportar CSV</a>
-    <form method="post" action="/apagar" onsubmit="return confirm('¿Cerrar el programa?')">
-      <button class="enlace" type="submit">Cerrar programa</button></form>
-  </nav>
+  <div class="cabecera">
+    <a class="marca" href="/">Gestor terminológico</a>
+    <nav>
+      {enlace("/", "Diccionario", "diccionario")}
+      {enlace("/importar", "Importar", "importar")}
+      {enlace("/exportar", "Exportar", "exportar")}
+      <form method="post" action="/apagar" onsubmit="return confirm('¿Cerrar el programa?')">
+        <button class="enlace" type="submit">Cerrar programa</button></form>
+    </nav>
+  </div>
 </header>
 <main>{aviso}{cuerpo}</main>
 </body></html>"""
@@ -82,22 +137,23 @@ def pagina(titulo, cuerpo, mensaje="", tipo="ok"):
 
 def _traducciones_en_linea(traducciones):
     if not traducciones:
-        return '<span class="suave">—</span>'
-    return "<br>".join(f"<b>{esc(idioma)}</b> {esc(', '.join(terminos))}"
-                       for idioma, terminos in traducciones)
+        return ""
+    filas = "".join(f'<span class="idioma">{esc(idioma)}</span><span>{esc(", ".join(terminos))}</span>'
+                    for idioma, terminos in traducciones)
+    return f'<p class="trads">{filas}</p>'
 
 
 def formulario_nuevo(valores=None, abierto=False):
     v = valores or {}
     marcada = " checked" if "otro_significado" in v else ""
     return f"""<details class="tarjeta"{' open' if abierto else ''}>
-<summary>➕ Añadir un término</summary>
-<form method="post" action="/concepto/nuevo" class="rejilla" style="margin-top:.8rem">
+<summary>Añadir un término</summary>
+<form method="post" action="/concepto/nuevo" class="rejilla" style="margin-top:1rem">
   <label>Término en español <input name="termino" required value="{esc(v.get('termino'))}"></label>
   <label>Área <input name="area" required value="{esc(v.get('area'))}" placeholder="Informática, Medicina..."></label>
   <label class="ancha">Definición <input name="definicion" value="{esc(v.get('definicion'))}"></label>
   <label class="ancha casilla"><input type="checkbox" name="otro_significado"{marcada}>
-    Este término ya existe y es <b>otro significado</b> (entonces la definición es obligatoria)</label>
+    Este término ya existe y es otro significado (entonces la definición es obligatoria)</label>
   <div class="ancha"><button class="principal" type="submit">Guardar término</button></div>
 </form></details>"""
 
@@ -106,31 +162,34 @@ def vista_indice(conceptos, consulta="", valores=None, abrir_formulario=False,
                  mensaje="", tipo="ok"):
     """`conceptos`: lista de dicts con id, termino, area, definicion y
     traducciones (lista de (idioma, [términos]))."""
-    filas = "".join(
-        f"""<tr><td><a href="/concepto/{c['id']}"><b>{esc(c['termino'])}</b></a></td>
-<td>{esc(c['area'])}</td><td>{esc(c['definicion']) or '<span class="suave">—</span>'}</td>
-<td>{_traducciones_en_linea(c['traducciones'])}</td>
-<td class="acciones"><a href="/concepto/{c['id']}">Editar</a></td></tr>"""
+    entradas = "".join(
+        f"""<article class="entrada">
+<div class="cabeza"><h2><a href="/concepto/{c['id']}">{esc(c['termino'])}</a></h2>
+<span class="area">{esc(c['area'])}</span>
+<a class="editar" href="/concepto/{c['id']}">Editar</a></div>
+{f'<p class="def">{esc(c["definicion"])}</p>' if c['definicion'] else ''}
+{_traducciones_en_linea(c['traducciones'])}
+</article>"""
         for c in conceptos)
 
     if conceptos:
-        tabla = f"""<div class="tabla"><table>
-<thead><tr><th>Término (ES)</th><th>Área</th><th>Definición</th><th>Traducciones</th><th></th></tr></thead>
-<tbody>{filas}</tbody></table></div>"""
+        lista = entradas
     elif consulta:
-        tabla = f'<p class="suave">No hay resultados para «{esc(consulta)}».</p>'
+        lista = f'<p class="vacio">No hay resultados para «{esc(consulta)}». Prueba con otra palabra o una parte de ella.</p>'
     else:
-        tabla = '<p class="suave">Todavía no hay ningún término. Añade el primero arriba o importa un CSV.</p>'
+        lista = ('<p class="vacio">Todavía no hay ningún término. Añade el primero con el formulario '
+                 'de arriba o importa un glosario en CSV.</p>')
 
     quitar = ' <a href="/">Quitar filtro</a>' if consulta else ""
     cuerpo = f"""<h1>Diccionario</h1>
+<form method="get" action="/" class="buscador" role="search">
+  <input name="q" value="{esc(consulta)}" aria-label="Buscar"
+    placeholder="Busca un término o una traducción" autofocus>
+  <button class="principal" type="submit">Buscar</button></form>
+<p class="recuento">{len(conceptos)} resultado(s). La búsqueda ignora tildes y mayúsculas.{quitar}</p>
 {formulario_nuevo(valores, abrir_formulario)}
-<form method="get" action="/" class="buscador">
-  <input name="q" value="{esc(consulta)}" placeholder="Buscar en términos, definiciones, áreas y traducciones (sin tildes ni mayúsculas)" autofocus>
-  <button type="submit">Buscar</button></form>
-<p class="suave">{len(conceptos)} resultado(s){quitar}</p>
-{tabla}"""
-    return pagina("Diccionario", cuerpo, mensaje, tipo)
+{lista}"""
+    return pagina("Diccionario", cuerpo, mensaje, tipo, activa="diccionario")
 
 
 # ---------- Un concepto ----------
@@ -147,7 +206,7 @@ def vista_concepto(c, traducciones, mensaje="", tipo="ok"):
 </form>"""
         for t in traducciones) or '<p class="suave">Todavía no tiene traducciones.</p>'
 
-    cuerpo = f"""<p><a href="/">← Volver al diccionario</a></p>
+    cuerpo = f"""<p class="migas"><a href="/">Volver al diccionario</a></p>
 <h1>{esc(c['termino_es'])}</h1>
 
 <form method="post" action="/concepto/{c['id_concepto']}/editar" class="tarjeta rejilla">
@@ -163,15 +222,15 @@ def vista_concepto(c, traducciones, mensaje="", tipo="ok"):
 <form method="post" action="/concepto/{c['id_concepto']}/traduccion" class="tarjeta rejilla">
   <label>Idioma (2-3 letras: EN, FR, DE...) <input name="idioma" maxlength="3" required></label>
   <label>Traducción <input name="termino" required></label>
-  <div class="ancha"><button type="submit">➕ Añadir traducción</button></div>
+  <div class="ancha"><button type="submit">Añadir traducción</button></div>
 </form>
 
-<h2>Zona delicada</h2>
+<h2>Borrar</h2>
 <form method="post" action="/concepto/{c['id_concepto']}/borrar"
   onsubmit="return confirm('¿Borrar este término y todas sus traducciones? No se puede deshacer.')">
-  <button class="peligro" type="submit">🗑️ Borrar este término y sus traducciones</button>
+  <button class="peligro" type="submit">Borrar este término y sus traducciones</button>
 </form>"""
-    return pagina(c["termino_es"], cuerpo, mensaje, tipo)
+    return pagina(c["termino_es"], cuerpo, mensaje, tipo, activa="diccionario")
 
 
 # ---------- Importar ----------
@@ -182,7 +241,7 @@ CUERPO_IMPORTAR = """<h1>Importar desde CSV</h1>
 <div class="tarjeta">
 <p>Sube un CSV de Excel o de Google Sheets con las columnas <b>Área</b>, <b>Definición</b>,
 <b>ES</b> y una columna por idioma (EN, FR...). Varias traducciones en una celda se separan con <b>|</b>.</p>
-<p class="suave">Primero se revisa el archivo y se te muestra un resumen. No se guarda nada hasta que lo confirmes.</p>
+<p class="pequeno">Primero se revisa el archivo y se te muestra un resumen. No se guarda nada hasta que lo confirmes.</p>
 <div class="rejilla">
   <label class="ancha">Archivo CSV <input type="file" id="archivo" accept=".csv,.txt,text/csv"></label>
   <label class="ancha">Área para las filas que no la tengan (opcional) <input type="text" id="area"></label>
@@ -242,7 +301,7 @@ $('revisar').onclick = async () => {
 
 
 def vista_importar():
-    return pagina("Importar", CUERPO_IMPORTAR)
+    return pagina("Importar", CUERPO_IMPORTAR, activa="importar")
 
 
 # ---------- Otras ----------
@@ -254,4 +313,4 @@ def vista_apagado():
 
 def vista_error(estado, texto):
     return pagina(f"Error {estado}", f"""<h1>{esc(texto)}</h1>
-<p><a href="/">← Volver al diccionario</a></p>""", tipo="error")
+<p><a href="/">Volver al diccionario</a></p>""", tipo="error")
