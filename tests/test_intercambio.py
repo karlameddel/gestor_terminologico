@@ -225,3 +225,25 @@ class TestSinConfirmar(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEnMemoria(Base):
+    """importar_bytes / exportar_bytes: lo que usa la interfaz web (no hay archivos de por medio)."""
+
+    def test_exportar_bytes_es_identico_al_archivo(self):
+        self.rellenar()
+        archivo, _ = self.exportar()
+        with conexion() as conn:
+            datos, n, idiomas = ix.exportar_bytes(conn)
+        self.assertEqual((datos, n, idiomas), (archivo.read_bytes(), 4, ["DE", "EN", "FR"]))
+
+    def test_exportar_bytes_con_la_base_vacia(self):
+        with conexion() as conn:
+            self.assertEqual(ix.exportar_bytes(conn), (b"", 0, []))
+
+    def test_importar_bytes_equivale_a_importar_el_archivo(self):
+        contenido = "Área;ES;EN\nHogar;casa;house\n".encode("utf-8")
+        with conexion() as conn:
+            res = ix.importar_bytes(conn, contenido)
+            conn.rollback()
+        self.assertEqual((res.conceptos_nuevos, res.traducciones_nuevas), (1, 1))

@@ -1,5 +1,9 @@
-# Base de datos local
+# Base de datos local (contiene tus datos, no se sube)
 *.db
+
+# Glosarios exportados (son tus datos); el ejemplo del repo sí se sube
+*.csv
+!ejemplos/*.csv
 
 # Python
 __pycache__/
@@ -12,6 +16,7 @@ venv/
 .idea/
 .DS_Store
 
-# Glosarios exportados
-*.csv
-!ejemplos/*.csv
+# Construcción del .exe (se genera con construir_exe.bat)
+build/
+dist/
+*.spec

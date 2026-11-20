@@ -34,12 +34,35 @@ Queremos crear una base de datos estructurada donde cada entrada sea un concepto
 Solo necesitas Python 3 (SQLite ya viene incluido, no hay que instalar nada más):
 
 ```bash
-git clone https://github.com/karlameddel/gestor_terminologico.git
+git clone https://github.com/<tu-usuario>/gestor_terminologico.git
 cd gestor_terminologico
-python main.py
+python app_web.py      # interfaz en el navegador (la recomendada)
+python main.py         # versión de menú en la terminal
 ```
 
-La primera vez se crea automáticamente el archivo `gestor_traductor.db` junto a `main.py`. Ese archivo contiene tus datos y no se sube a GitHub.
+Las dos usan **la misma base de datos**, así que se pueden alternar. La primera vez se crea automáticamente el archivo `gestor_traductor.db` junto a `main.py`. Ese archivo contiene tus datos y no se sube a GitHub.
+
+## Interfaz en el navegador
+`python app_web.py` arranca un pequeño servidor **solo accesible desde tu propio ordenador** y abre el navegador. No hay que instalar nada: usa solo la biblioteca estándar de Python.
+
+- **Diccionario** con buscador (sin tildes ni mayúsculas), y formulario para añadir términos. Si el término ya existe, hay que marcar que es otro significado y poner su definición.
+- **Página de cada término:** editar su área y definición, y añadir, editar o borrar traducciones.
+- **Importar CSV:** se elige el archivo, se muestra un resumen (nuevos, ampliados, errores con su fila) y solo se guarda al confirmar.
+- **Exportar CSV:** descarga el glosario para abrirlo en Excel o Google Sheets.
+- **Cerrar programa:** apaga el servidor.
+
+Protecciones: solo escucha en `127.0.0.1`, rechaza peticiones que lleguen desde otras páginas web abiertas en el navegador y nunca interpreta como HTML lo que se escribe en el glosario.
+
+## Crear el programa para Windows (.exe)
+Para que alguien sin Python pueda usar el gestor con doble clic, se empaqueta `app_web.py` con PyInstaller. Un `.exe` solo se puede construir **en Windows**. Hay dos formas:
+
+**A) Con GitHub (sin instalar nada):** en la pestaña *Actions* del repositorio, elige *Construir .exe* y pulsa *Run workflow*. Al terminar, descarga `GestorTerminologico-windows` de la sección *Artifacts*. Si en vez de eso creas una etiqueta que empiece por `v` (por ejemplo `v1.0`), el `.exe` se publica además en *Releases*.
+
+**B) En tu ordenador:** instala el Python oficial de [python.org](https://www.python.org/downloads/) (marca *Add python.exe to PATH*; el Python de MSYS2 da problemas con PyInstaller) y ejecuta `construir_exe.bat`. El resultado queda en `dist\GestorTerminologico.exe`.
+
+Al abrir el `.exe` aparece una ventana negra de consola (no la cierres mientras lo uses) y se abre el navegador. **La base de datos `gestor_traductor.db` se crea junto al `.exe`**: para hacer copia de seguridad, o para pasar los datos a otro ordenador, basta con copiar ese archivo.
+
+Windows puede mostrar un aviso («Windows protegió su PC») porque el programa no está firmado digitalmente. Es normal en programas pequeños: *Más información → Ejecutar de todas formas*. Algunos antivirus también marcan por error los `.exe` hechos con PyInstaller.
 
 ## Importar y exportar (Excel / Google Sheets)
 Las opciones **8** y **9** del menú trabajan con archivos CSV, que se abren y se guardan desde Excel y Google Sheets.
@@ -66,7 +89,10 @@ En la carpeta `ejemplos/` hay un archivo de prueba (`glosario_ejemplo.csv`), con
 
 ## Estructura del proyecto
 ```text
-main.py                  # punto de entrada
+main.py                  # punto de entrada: versión de menú en la terminal
+app_web.py               # punto de entrada: interfaz en el navegador (es lo que se empaqueta)
+construir_exe.bat        # construye el .exe en Windows
+.github/workflows/       # tests y construcción del .exe automáticos en GitHub
 ejemplos/
 └── glosario_ejemplo.csv # archivo de prueba para importar
 gestor/
@@ -76,9 +102,34 @@ gestor/
 ├── repositorio.py       # operaciones sobre los datos (solo SQL)
 ├── intercambio.py       # importar y exportar CSV (Excel / Google Sheets)
 ├── entrada.py           # pedir datos por teclado
-└── menu.py              # menú y pantallas
+├── menu.py              # menú y pantallas de la terminal
+├── web_servidor.py      # servidor local: rutas, seguridad y acciones de la web
+└── web_vistas.py        # pantallas HTML de la web
+tests/                   # pruebas automáticas (ver más abajo)
 ```
-El código está separado en capas: `menu.py` se encarga de lo que se ve y se pregunta, y `repositorio.py` de leer y guardar datos. Así se puede cambiar la interfaz (por ejemplo, a una web) o añadir funciones nuevas (como la importación de CSV, que vive en `intercambio.py`) sin tocar el resto.
+El código está separado en capas: `menu.py` y `web_servidor.py` se encargan de lo que se ve y se pregunta, y `repositorio.py` e `intercambio.py` de leer y guardar datos. Por eso la terminal y el navegador comparten la misma lógica: se puede cambiar la interfaz o añadir funciones sin tocar el resto.
+
+## Tests
+El proyecto tiene pruebas automáticas que comprueban que todo sigue funcionando después de cada cambio: búsqueda, varios significados, migración de bases de datos antiguas, importación y exportación, y el menú completo.
+
+```bash
+python -m unittest          # ejecuta todas
+python -m unittest -v       # igual, mostrando el nombre de cada prueba
+```
+
+No hay que instalar nada (`unittest` viene con Python). Cada prueba trabaja con una base de datos temporal, así que **nunca toca tu `gestor_traductor.db`**. Si ves `OK` al final, todo va bien. Si ves `FAILED`, indica qué prueba falló y por qué.
+
+| Archivo | Qué comprueba |
+|---|---|
+| `test_texto.py` | Comparar textos sin distinguir mayúsculas ni tildes |
+| `test_repositorio.py` | Conceptos, traducciones, significados repetidos, búsqueda y reglas de la base de datos |
+| `test_basedatos.py` | Creación de tablas y migración (incluido qué pasa si falla) |
+| `test_intercambio.py` | Importar y exportar CSV, formatos de Excel y Google Sheets, errores |
+| `test_menu.py` | Sesiones completas simulando a una persona usando el menú |
+| `test_web.py` | La interfaz web con un servidor de verdad: páginas, formularios, importar/exportar y seguridad |
+| `test_config.py` | Dónde se guarda la base de datos (también cuando es un `.exe`) |
+
+Cuando añadas una función nueva, añade también su prueba. Y si encuentras un fallo, escribe primero la prueba que lo reproduce y luego arréglalo: así no vuelve a aparecer.
 
 ## Estructura de la Base de Datos
 El modelo gira en torno al **concepto** (un significado concreto), no a la palabra. Dos tablas vinculadas:

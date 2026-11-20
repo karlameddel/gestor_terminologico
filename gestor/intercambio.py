@@ -62,12 +62,11 @@ class ResultadoImportacion:
 
 # ---------- Exportar ----------
 
-def exportar_csv(conn, ruta):
-    """Escribe todo el diccionario en `ruta`.
-    Devuelve (nº de conceptos, idiomas exportados). Si no hay nada, no crea el archivo."""
+def _preparar_exportacion(conn):
+    """Devuelve (cabecera, filas, idiomas), o None si no hay ningún concepto."""
     conceptos = repo.listar_conceptos(conn)
     if not conceptos:
-        return 0, []
+        return None
 
     por_concepto = defaultdict(lambda: defaultdict(list))
     for t in conn.execute(
@@ -77,33 +76,57 @@ def exportar_csv(conn, ruta):
         por_concepto[t["id_concepto"]][t["idioma"]].append(t["termino"])
     idiomas = sorted({i for d in por_concepto.values() for i in d})
 
+    union = f" {SEPARADOR_TRADUCCIONES} "
+    cabecera = ["Área", "Definición", IDIOMA_ORIGEN, *idiomas]
+    filas = [[c["area"], c["definicion"], c["termino_es"],
+              *[union.join(por_concepto[c["id_concepto"]][i]) for i in idiomas]]
+             for c in conceptos]
+    return cabecera, filas, idiomas
+
+
+def exportar_bytes(conn):
+    """Todo el diccionario como contenido de un CSV (bytes, UTF-8 con BOM).
+    Devuelve (bytes, nº de conceptos, idiomas). Si no hay nada: (b"", 0, [])."""
+    preparado = _preparar_exportacion(conn)
+    if preparado is None:
+        return b"", 0, []
+    cabecera, filas, idiomas = preparado
+    salida = io.StringIO(newline="")
+    escritor = csv.writer(salida, delimiter=";")
+    escritor.writerow(cabecera)
+    escritor.writerows(filas)
+    return salida.getvalue().encode("utf-8-sig"), len(filas), idiomas
+
+
+def exportar_csv(conn, ruta):
+    """Escribe todo el diccionario en `ruta`.
+    Devuelve (nº de conceptos, idiomas exportados). Si no hay nada, no crea el archivo."""
+    datos, n, idiomas = exportar_bytes(conn)
+    if n == 0:
+        return 0, []
     ruta = Path(ruta)
     temporal = ruta.with_name(ruta.name + ".tmp")
-    union = f" {SEPARADOR_TRADUCCIONES} "
     try:
         # Se escribe en un archivo temporal y luego se renombra: si algo falla
         # a mitad, no se estropea un archivo anterior con el mismo nombre.
-        with open(temporal, "w", encoding="utf-8-sig", newline="") as f:
-            w = csv.writer(f, delimiter=";")
-            w.writerow(["Área", "Definición", IDIOMA_ORIGEN, *idiomas])
-            for c in conceptos:
-                trads = por_concepto[c["id_concepto"]]
-                w.writerow([c["area"], c["definicion"], c["termino_es"],
-                            *[union.join(trads[i]) for i in idiomas]])
+        temporal.write_bytes(datos)
         temporal.replace(ruta)
     finally:
         if temporal.exists():
             temporal.unlink()
-    return len(conceptos), idiomas
+    return n, idiomas
 
 
 # ---------- Importar ----------
 
-def _leer_texto(ruta):
+def _leer_bytes(ruta):
     try:
-        datos = Path(ruta).read_bytes()
+        return Path(ruta).read_bytes()
     except OSError as e:
         raise ErrorCSV(f"No se puede leer el archivo: {e.strerror or e}") from e
+
+
+def _decodificar(datos):
     try:
         return datos.decode("utf-8-sig"), "UTF-8"
     except UnicodeDecodeError:
@@ -228,10 +251,15 @@ def _importar_fila(conn, fila, cols, idiomas, area_defecto, linea, res):
 
 
 def importar_csv(conn, ruta, area_por_defecto=""):
-    """Lee el CSV y lo vuelca en la base de datos SIN hacer commit.
+    """Como importar_bytes(), pero leyendo el contenido de un archivo."""
+    return importar_bytes(conn, _leer_bytes(ruta), area_por_defecto)
+
+
+def importar_bytes(conn, datos, area_por_defecto=""):
+    """Vuelca el contenido de un CSV (bytes) en la base de datos SIN hacer commit.
     Las filas con problemas se saltan y se devuelven en `errores`.
     Lanza ErrorCSV si el archivo entero no se puede usar."""
-    texto, codificacion = _leer_texto(ruta)
+    texto, codificacion = _decodificar(datos)
     filas, separador, descartadas = _leer_filas(texto)
     cols, idiomas, ignoradas = _interpretar_cabecera(filas[0])
     area_por_defecto = area_por_defecto.strip()

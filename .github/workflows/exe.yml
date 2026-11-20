@@ -1,0 +1,34 @@
+# Construye GestorTerminologico.exe en un Windows de GitHub.
+# Se lanza a mano (pestaña Actions > "Construir .exe" > Run workflow) o al crear una
+# etiqueta que empiece por "v" (por ejemplo v1.0). Con etiqueta, además lo publica
+# en la sección Releases del repositorio.
+name: Construir .exe
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest
+      - run: python -m pip install pyinstaller
+      - run: python -m PyInstaller --noconfirm --clean --onefile --name GestorTerminologico app_web.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GestorTerminologico-windows
+          path: dist/GestorTerminologico.exe
+      - name: Publicar en Releases (solo si es una etiqueta)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/GestorTerminologico.exe
